@@ -1,0 +1,91 @@
+/* --- Light Theme Defaults --- */
+:root {
+  --brand-primary-color: #38BDF8;
+  --brand-secondary-color: #0EA5E9;
+  --brand-background-color: #ffffff;
+  --brand-text-color: #111827;
+  --brand-panel-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  --brand-button-bg: #38BDF8;
+  --brand-button-text: #ffffff;
+  --brand-input-bg: #F3F4F6;
+  --brand-input-text: #111827;
+  --brand-input-border: #D1D5DB;
+}
+
+/* --- Dark Theme Overrides --- */
+html[theme~="dark"] {
+  --brand-primary-color: #0EA5E9;
+  --brand-secondary-color: #38BDF8;
+  --brand-background-color: #1F2937;
+  --brand-text-color: #F3F4F6;
+  --brand-panel-shadow: 0 4px 6px rgba(0,0,0,0.5);
+  --brand-button-bg: #0EA5E9;
+  --brand-button-text: #F3F4F6;
+  --brand-input-bg: #374151;
+  --brand-input-text: #F3F4F6;
+  --brand-input-border: #4B5563;
+}
+
+/* --- General Styles --- */
+body {
+  font-family: "Roboto", sans-serif;
+  color: var(--brand-text-color);
+  background-color: var(--brand-background-color);
+  margin: 0;
+  padding: 0;
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, var(--brand-primary-color), var(--brand-secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: bold;
+}
+
+.data-panel {
+  background-color: var(--brand-background-color);
+  color: var(--brand-text-color);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: var(--brand-panel-shadow);
+}
+
+.button-primary {
+  background-color: var(--brand-button-bg);
+  color: var(--brand-button-text);
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s ease;
+}
+
+.button-primary:hover {
+  filter: brightness(90%);
+}
+
+input, .v-input-field {
+  background-color: var(--brand-input-bg);
+  color: var(--brand-input-text);
+  border: 1px solid var(--brand-input-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.horizontal-layout {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--brand-primary-color);
+  border-radius: 4px;
+}
