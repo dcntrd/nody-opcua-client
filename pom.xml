@@ -42,5 +42,12 @@
         </dependency>
     </dependencies>
 
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>Releases</name>
+            <url>https://maven.pkg.github.com/dcntrd/nody-opcua-client</url>
+        </repository>
+    </distributionManagement>
 
 </project>
