@@ -181,7 +181,7 @@ public class OpcUaClientService {
                 return;
             }
             try {
-                NodeId nodeId = (parentNodeId != null) ? parentNodeId : NodeIds.ObjectsFolder;
+                NodeId nodeId = (parentNodeId != null) ? parentNodeId : NodeIds.RootFolder;
                 List<? extends UaNode> nodes = c.getAddressSpace().browseNodes(nodeId);
                 listener.onNodesBrowsed(nodeId.toParseableString(), List.copyOf(nodes));
             } catch (Exception e) {

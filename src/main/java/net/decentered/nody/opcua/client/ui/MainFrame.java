@@ -16,9 +16,9 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
 
     private final OpcUaClientService service;
     private final CertificateManager certManager;
-    private final ConnectionPanel connectionPanel;
 
-    private final JPanel nodeTreePanel;
+    private final ConnectionPanel connectionPanel;
+    private final NodeTreePanel nodeTreePanel;
     private final JPanel attributePanel;
     private final JLabel statusBar;
 
@@ -44,13 +44,16 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
                 ()                     -> service.disconnect()
         );
 
+        nodeTreePanel = new NodeTreePanel(
+                parentNodeId -> service.browseNode(parentNodeId),
+                nodeId -> { /* TODO handle selected node */ }
+        );
+
         statusBar = new JLabel("Ready");
         statusBar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY),
                 BorderFactory.createEmptyBorder(2, 6, 2, 6)));
 
-
-        nodeTreePanel = new JPanel();
         attributePanel = new JPanel();
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, nodeTreePanel, attributePanel);
@@ -95,8 +98,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         SwingUtilities.invokeLater(() -> {
             connectionPanel.setConnected(endpointUrl);
             setStatus("Connected to " + endpointUrl + " – browsing root…");
-            //FIXME
-//            nodeTreePanel.clear();
+            nodeTreePanel.clear();
             service.browseNode(null);
         });
     }
@@ -105,8 +107,8 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     public void onDisconnected(String reason) {
         SwingUtilities.invokeLater(() -> {
             connectionPanel.setDisconnected(reason);
+            nodeTreePanel.clear();
             //FIXME
-            //nodeTreePanel.clear();
             //attributePanel.clear();
             setStatus("Disconnected: " + reason);
         });
@@ -128,16 +130,15 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     @Override
     public void onNodesBrowsed(String parentNodeId, List<UaNode> children) {
 
-        //FIXME
-        //        SwingUtilities.invokeLater(() -> {
-//            if (isRootBrowse(parentNodeId)) {
-//                nodeTreePanel.setRootChildren(children);
-//                setStatus("Loaded " + children.size() + " root nodes.");
-//            } else {
-//                nodeTreePanel.appendChildren(parentNodeId, children);
-//                setStatus("Loaded " + children.size() + " children for " + parentNodeId);
-//            }
-//        });
+        SwingUtilities.invokeLater(() -> {
+            if (isRootBrowse(parentNodeId)) {
+                nodeTreePanel.setRootChildren(children);
+                setStatus("Loaded " + children.size() + " root nodes.");
+            } else {
+                nodeTreePanel.appendChildren(parentNodeId, children);
+                setStatus("Loaded " + children.size() + " children for " + parentNodeId);
+            }
+        });
     }
 
     @Override
@@ -152,7 +153,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     // -------------------------------------------------------------------------
 
     private boolean isRootBrowse(String parentNodeId) {
-        return parentNodeId == null || parentNodeId.contains("i=85");
+        return parentNodeId == null || parentNodeId.contains("i=84");
     }
 
     private void setStatus(String text) {
