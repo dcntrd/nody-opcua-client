@@ -19,7 +19,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
 
     private final ConnectionPanel connectionPanel;
     private final NodeTreePanel nodeTreePanel;
-    private final JPanel attributePanel;
+    private final AttributePanel attributePanel;
     private final JLabel statusBar;
 
     public MainFrame() {
@@ -44,17 +44,20 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
                 ()                     -> service.disconnect()
         );
 
+        attributePanel = new AttributePanel();
+
         nodeTreePanel = new NodeTreePanel(
                 parentNodeId -> service.browseNode(parentNodeId),
-                nodeId -> { /* TODO handle selected node */ }
+                nodeId -> {
+                    attributePanel.showLoading(nodeId.toParseableString());
+                    service.readAttributes(nodeId);
+                }
         );
 
         statusBar = new JLabel("Ready");
         statusBar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY),
                 BorderFactory.createEmptyBorder(2, 6, 2, 6)));
-
-        attributePanel = new JPanel();
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, nodeTreePanel, attributePanel);
         splitPane.setDividerLocation(400);
@@ -108,8 +111,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         SwingUtilities.invokeLater(() -> {
             connectionPanel.setDisconnected(reason);
             nodeTreePanel.clear();
-            //FIXME
-            //attributePanel.clear();
+            attributePanel.clear();
             setStatus("Disconnected: " + reason);
         });
     }
@@ -143,11 +145,10 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
 
     @Override
     public void onAttributesRead(String nodeId, List<NodeAttribute> attributes) {
-    // FIXME
-        //        SwingUtilities.invokeLater(() -> {
-//            attributePanel.showAttributes(nodeId, attributes);
-//            setStatus("Attributes loaded for " + nodeId);
-//        });
+        SwingUtilities.invokeLater(() -> {
+            attributePanel.showAttributes(nodeId, attributes);
+            setStatus("Attributes loaded for " + nodeId);
+        });
     }
 
     // -------------------------------------------------------------------------

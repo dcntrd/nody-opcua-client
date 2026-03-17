@@ -16,10 +16,12 @@ import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Array;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -222,7 +224,7 @@ public class OpcUaClientService {
                     safeAdd(attrs, attrId.name(), () -> {
                         var dv = node.readAttribute(attrId);
                         var v  = dv.getValue().getValue();
-                        return v != null ? v.toString() : "<not applicable>";
+                        return v != null ? valueToString(v) : "<not applicable>";
                     });
                 }
 
@@ -233,6 +235,35 @@ public class OpcUaClientService {
                 listener.onError("readAttributes", e);
             }
         });
+    }
+
+    /**
+     * Converts an OPC UA attribute value to a human-readable string.
+     */
+    private static final int ARRAY_PREVIEW_LIMIT = 64;
+
+    private static String valueToString(Object v) {
+        if (v == null) return "<null>";
+
+        Class<?> cls = v.getClass();
+
+        // Array (primitive or Object[])
+        if (cls.isArray()) {
+            int len = Array.getLength(v);
+            if (len == 0) return "[]";
+
+            int preview = Math.min(len, ARRAY_PREVIEW_LIMIT);
+            StringJoiner sj = new StringJoiner(", ", "[", len > preview ? ", …]" : "]");
+            for (int i = 0; i < preview; i++) {
+                Object elem = Array.get(v, i);
+                sj.add(elem != null ? elem.toString() : "null");
+            }
+            if (len > 1) sj.add("  (" + len + " elements)");
+            return sj.toString();
+        }
+
+        // Everything else: rely on the type's own toString()
+        return v.toString();
     }
 
     /** Shuts down the background executor – call on application exit. */
