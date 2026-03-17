@@ -158,8 +158,6 @@ public class NodeTreePanel extends JPanel {
     }
 
 
-    // ── Private helpers ───────────────────────────────────────────────────────
-
     private OpcUaTreeNode findNode(OpcUaTreeNode current, String nodeIdStr) {
         if (current.getNodeId() != null &&
                 current.getNodeId().toParseableString().equals(nodeIdStr)) return current;
