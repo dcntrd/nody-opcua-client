@@ -1,0 +1,54 @@
+name: Build & Release Fat JAR
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "v*.*.*"   # triggers release on version tags like v1.0.0
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 2. Setup Java
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven   # 🔥 built-in Maven cache (simplest way)
+
+      # (Optional manual cache alternative)
+      # - name: Cache Maven dependencies
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ~/.m2
+      #     key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-m2
+
+      # 3. Build project (fat JAR via shade/assembly plugin)
+      - name: Build with Maven
+        run: mvn -B clean package
+
+      # 4. Upload artifact (always available)
+      - name: Upload fat JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: fat-jar
+          path: target/*jar
+
+      # 5. Create GitHub Release (only on tag)
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/*jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
