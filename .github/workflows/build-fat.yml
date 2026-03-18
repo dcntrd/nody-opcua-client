@@ -7,10 +7,13 @@ on:
       - "v*.*.*"   # triggers release on version tags like v1.0.0
   pull_request:
 
+permissions:
+  contents: write
+  
 jobs:
   build:
     runs-on: ubuntu-latest
-
+  
     steps:
       # 1. Checkout repository
       - name: Checkout repo
