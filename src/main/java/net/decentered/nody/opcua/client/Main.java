@@ -11,7 +11,7 @@ public class Main {
 
     private static final Logger logger = LogManager.getLogger(Main.class);
 
-    static void main() {
+    static void main(String[] args) {
 
         logger.info("Starting Client");
 
