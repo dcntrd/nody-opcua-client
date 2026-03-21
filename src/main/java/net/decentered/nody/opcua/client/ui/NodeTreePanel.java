@@ -8,7 +8,10 @@ import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.*;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -30,7 +33,6 @@ public class NodeTreePanel extends JPanel {
             add(new DefaultMutableTreeNode("Loading…"));
         }
 
-        /** Constructor for the (invisible) root node. */
         public OpcUaTreeNode(String label) {
             super(label);
             this.nodeId = null;
@@ -128,45 +130,58 @@ public class NodeTreePanel extends JPanel {
         tree.expandPath(new TreePath(root.getPath()));
     }
 
-    /**
-     * Replaces the dummy "Loading…" child of the matching parent node with
-     * the real browsed children, then expands the parent so the results are
-     * immediately visible without a second user gesture.
-     *
-     * <p>This is the second half of the lazy-load fix: {@code treeWillExpand}
-     * deliberately left the model untouched; we complete the work here once
-     * the async browse result has arrived on the EDT.</p>
-     */
     public void appendChildren(String parentNodeIdStr, List<UaNode> children) {
-        OpcUaTreeNode parentNode = findNode(root, parentNodeIdStr);
-        if (parentNode == null) return;
+        List<OpcUaTreeNode> matches = findAllNodes(root, parentNodeIdStr);
+        if (matches.isEmpty()) return;
 
-        // Replace placeholder with real children
-        parentNode.removeAllChildren();
-        for (UaNode child : children) parentNode.add(new OpcUaTreeNode(child));
-        treeModel.nodeStructureChanged(parentNode);
+        List<UaNode> unique = deduplicate(children);
+        for (OpcUaTreeNode parentNode : matches) {
+            // Replace placeholder with real children
+            parentNode.removeAllChildren();
+            for (UaNode child : unique) parentNode.add(new OpcUaTreeNode(child));
+            treeModel.nodeStructureChanged(parentNode);
 
-        // Expand so the user sees the results without clicking again
-        tree.expandPath(new TreePath(parentNode.getPath()));
+            // Expand so the user sees the results without clicking again
+            tree.expandPath(new TreePath(parentNode.getPath()));
+        }
     }
 
-    /** Resets the tree to its initial empty state. */
     public void clear() {
         root.removeAllChildren();
         root.setChildrenLoaded(false);
-        treeModel.nodeStructureChanged(root);              // tree is now truly empty
+        treeModel.nodeStructureChanged(root);
     }
 
+    private List<OpcUaTreeNode> findAllNodes(OpcUaTreeNode current, String nodeIdStr) {
+        List<OpcUaTreeNode> result = new ArrayList<>();
+        collectNodes(current, nodeIdStr, result);
+        return result;
+    }
 
-    private OpcUaTreeNode findNode(OpcUaTreeNode current, String nodeIdStr) {
+    private void collectNodes(OpcUaTreeNode current, String nodeIdStr,
+                              List<OpcUaTreeNode> result) {
         if (current.getNodeId() != null &&
-                current.getNodeId().toParseableString().equals(nodeIdStr)) return current;
+                current.getNodeId().toParseableString().equals(nodeIdStr)) {
+            result.add(current);
+        }
         for (int i = 0; i < current.getChildCount(); i++) {
             if (current.getChildAt(i) instanceof OpcUaTreeNode tn) {
-                OpcUaTreeNode found = findNode(tn, nodeIdStr);
-                if (found != null) return found;
+                collectNodes(tn, nodeIdStr, result);
             }
         }
-        return null;
+    }
+
+    /**
+     * Deduplicates a browse result by NodeId, preserving encounter order.
+     * Servers may return the same node via multiple reference types
+     * (e.g. both Organizes and HasComponent pointing to the same NodeId),
+     * which would otherwise create two identical-looking entries in the tree.
+     */
+    private static List<UaNode> deduplicate(List<UaNode> nodes) {
+        Map<String, UaNode> seen = new LinkedHashMap<>();
+        for (UaNode n : nodes) {
+            seen.putIfAbsent(n.getNodeId().toParseableString(), n);
+        }
+        return new ArrayList<>(seen.values());
     }
 }
