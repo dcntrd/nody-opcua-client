@@ -6,6 +6,8 @@ import net.decentered.nody.opcua.client.security.CertificateManager;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
 import org.eclipse.milo.opcua.sdk.client.identity.AnonymousProvider;
 import org.eclipse.milo.opcua.sdk.client.identity.IdentityProvider;
+import org.eclipse.milo.opcua.sdk.client.identity.UsernameProvider;
+import org.eclipse.milo.opcua.sdk.client.identity.X509IdentityProvider;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
@@ -16,8 +18,11 @@ import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.lang.reflect.Array;
-import java.security.KeyPair;
+import java.nio.file.Files;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
@@ -124,8 +129,7 @@ public class OpcUaClientService {
                             configBuilder
                                     .setApplicationName(LocalizedText.english(CertificateManager.APPLICATION_NAME))
                                     .setApplicationUri(CertificateManager.APPLICATION_URI)
-                                    .setProductUri("nody-opcua-client")
-                                    .setIdentityProvider(getIdentityProvider());
+                                    .setProductUri("nody-opcua-client");
 
                             if (secured) {
                                 configBuilder
@@ -133,6 +137,42 @@ public class OpcUaClientService {
                                         .setCertificate(fCert)
                                         .setCertificateChain(List.of(fCert).toArray(new X509Certificate[0]));
                             }
+
+                            // Identity provider – three modes supported.
+                            switch (config.authMode()) {
+                                case USERNAME_PASSWORD -> {
+                                    // Credentials are sent encrypted inside the secure channel.
+                                    char[] pw = config.password();
+                                    configBuilder.setIdentityProvider(
+                                            new UsernameProvider(config.username(), new String(pw)));
+                                    java.util.Arrays.fill(pw, '\0');
+                                }
+                                case USER_CERTIFICATE -> {
+                                    // Load the user's PKCS#12 keystore and pass its key/cert
+                                    // to Milo's X509IdentityProvider, which signs the server
+                                    // nonce with the private key during session activation.
+                                    char[] certPw = config.userCertPassword();
+                                    try {
+                                        KeyStore ks = KeyStore.getInstance("PKCS12");
+                                        try (var in = Files.newInputStream(config.userCertPath())) {
+                                            ks.load(in, certPw);
+                                        }
+                                        // Use the first key entry found in the store
+                                        String alias = ks.aliases().nextElement();
+                                        PrivateKey userKey  = (PrivateKey) ks.getKey(alias, certPw);
+                                        X509Certificate userCert = (X509Certificate) ks.getCertificate(alias);
+                                        configBuilder.setIdentityProvider(
+                                                new X509IdentityProvider(userCert, userKey));
+                                    } catch (CertificateException | KeyStoreException | IOException | NoSuchAlgorithmException | UnrecoverableKeyException e) {
+                                        LOG.error("Load user cert failed", e);
+                                        listener.onError("load user cert", e);
+                                    } finally {
+                                        java.util.Arrays.fill(certPw, '\0');
+                                    }
+                                }
+                                default -> configBuilder.setIdentityProvider(new AnonymousProvider());
+                            }
+
                         }
                 );
 

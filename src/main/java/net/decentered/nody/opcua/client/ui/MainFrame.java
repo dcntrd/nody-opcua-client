@@ -5,6 +5,7 @@ import net.decentered.nody.opcua.client.model.NodeAttribute;
 import net.decentered.nody.opcua.client.security.CertificateManager;
 import net.decentered.nody.opcua.client.service.OpcUaClientListener;
 import net.decentered.nody.opcua.client.service.OpcUaClientService;
+import net.decentered.nody.opcua.client.settings.ConnectionSettings;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
 
 import javax.swing.*;
@@ -16,6 +17,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
 
     private final OpcUaClientService service;
     private final CertificateManager certManager;
+    private final ConnectionSettings connectionSettings;
 
     private final ConnectionPanel connectionPanel;
     private final NodeTreePanel nodeTreePanel;
@@ -30,6 +32,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         setLocationRelativeTo(null);
 
         certManager = new CertificateManager();
+        connectionSettings = new ConnectionSettings();
         service     = new OpcUaClientService(this, certManager);
 
         addWindowListener(new java.awt.event.WindowAdapter() {
@@ -40,6 +43,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         });
 
         connectionPanel = new ConnectionPanel(
+                connectionSettings,
                 (ConnectionConfig cfg) -> service.connect(cfg),
                 ()                     -> service.disconnect()
         );
