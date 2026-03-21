@@ -164,8 +164,7 @@ public class OpcUaClientService {
                                         configBuilder.setIdentityProvider(
                                                 new X509IdentityProvider(userCert, userKey));
                                     } catch (CertificateException | KeyStoreException | IOException | NoSuchAlgorithmException | UnrecoverableKeyException e) {
-                                        LOG.error("Load user cert failed", e);
-                                        listener.onError("load user cert", e);
+                                        throw new RuntimeException("load user cert failed", e);
                                     } finally {
                                         java.util.Arrays.fill(certPw, '\0');
                                     }

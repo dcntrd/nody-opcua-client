@@ -83,16 +83,28 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     private JMenuBar buildMenuBar() {
         JMenuBar bar = new JMenuBar();
 
-        // Help menu
-        JMenu helpMenu = new JMenu("Help");
+        // ── Security menu ─────────────────────────────────────────────────────
+        JMenu securityMenu = new JMenu("Security");
 
-        JMenuItem certInfo = new JMenuItem("Certificate Info…");
-        certInfo.setToolTipText("View, export or regenerate the client application certificate");
-        certInfo.addActionListener(e ->
+        JMenuItem appCertItem = new JMenuItem("Application Certificate Info…");
+        appCertItem.setToolTipText(
+                "View, export or regenerate the client application certificate " +
+                        "used for the secure channel");
+        appCertItem.addActionListener(e ->
                 new CertificateInfoDialog(this, certManager).setVisible(true));
 
-        helpMenu.add(certInfo);
-        bar.add(helpMenu);
+        JMenuItem userCertItem = new JMenuItem("Create / Export User Certificate…");
+        userCertItem.setToolTipText(
+                "Generate a self-signed user identity certificate (X.509) " +
+                        "for OPC UA user authentication and export its public key as PEM");
+        userCertItem.addActionListener(e ->
+                new UserCertificateDialog(this).setVisible(true));
+
+        securityMenu.add(appCertItem);
+        securityMenu.addSeparator();
+        securityMenu.add(userCertItem);
+        bar.add(securityMenu);
+
         return bar;
     }
 
