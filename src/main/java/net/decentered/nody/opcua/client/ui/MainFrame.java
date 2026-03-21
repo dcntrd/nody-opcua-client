@@ -83,7 +83,6 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     private JMenuBar buildMenuBar() {
         JMenuBar bar = new JMenuBar();
 
-        // ── Security menu ─────────────────────────────────────────────────────
         JMenu securityMenu = new JMenu("Security");
 
         JMenuItem appCertItem = new JMenuItem("Application Certificate Info…");
@@ -104,6 +103,15 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         securityMenu.addSeparator();
         securityMenu.add(userCertItem);
         bar.add(securityMenu);
+
+        JMenu helpMenu = new JMenu("Help");
+
+        JMenuItem aboutItem = new JMenuItem("About…");
+        aboutItem.setToolTipText("Show application information and license");
+        aboutItem.addActionListener(e -> new AboutDialog(this).setVisible(true));
+
+        helpMenu.add(aboutItem);
+        bar.add(helpMenu);
 
         return bar;
     }
