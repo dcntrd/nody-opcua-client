@@ -53,7 +53,7 @@ public class QuickConnectBar extends JPanel {
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         left.add(new JLabel("Connection:"));
         profileCombo = new JComboBox<>();
-        profileCombo.setPreferredSize(new Dimension(280, 26));
+        profileCombo.setPreferredSize(new Dimension(400, 26));
         profileCombo.setRenderer(new ProfileRenderer());
         left.add(profileCombo);
 
