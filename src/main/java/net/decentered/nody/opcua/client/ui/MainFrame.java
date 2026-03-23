@@ -5,7 +5,7 @@ import net.decentered.nody.opcua.client.model.NodeAttribute;
 import net.decentered.nody.opcua.client.security.CertificateManager;
 import net.decentered.nody.opcua.client.service.OpcUaClientListener;
 import net.decentered.nody.opcua.client.service.OpcUaClientService;
-import net.decentered.nody.opcua.client.settings.ConnectionSettings;
+import net.decentered.nody.opcua.client.settings.ConnectionProfileStore;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
 
 import javax.swing.*;
@@ -17,9 +17,9 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
 
     private final OpcUaClientService service;
     private final CertificateManager certManager;
-    private final ConnectionSettings connectionSettings;
+    private final ConnectionProfileStore profileStore;
 
-    private final ConnectionPanel connectionPanel;
+    private final QuickConnectBar quickConnectBar;
     private final NodeTreePanel nodeTreePanel;
     private final AttributePanel attributePanel;
     private final JLabel statusBar;
@@ -31,9 +31,9 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         setMinimumSize(new Dimension(700, 450));
         setLocationRelativeTo(null);
 
-        certManager = new CertificateManager();
-        connectionSettings = new ConnectionSettings();
-        service     = new OpcUaClientService(this, certManager);
+        certManager  = new CertificateManager();
+        profileStore = new ConnectionProfileStore();
+        service      = new OpcUaClientService(this, certManager);
 
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
@@ -42,11 +42,10 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
             }
         });
 
-        connectionPanel = new ConnectionPanel(
-                connectionSettings,
-                (ConnectionConfig cfg) -> service.connect(cfg),
-                ()                     -> service.disconnect()
-        );
+        quickConnectBar = new QuickConnectBar(
+                profileStore,
+                cfg -> service.connect(cfg),
+                ()  -> service.disconnect());
 
         attributePanel = new AttributePanel();
 
@@ -68,7 +67,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         splitPane.setResizeWeight(0.35);
 
         getContentPane().setLayout(new BorderLayout());
-        getContentPane().add(connectionPanel, BorderLayout.NORTH);
+        getContentPane().add(quickConnectBar, BorderLayout.NORTH);
         getContentPane().add(splitPane,       BorderLayout.CENTER);
         getContentPane().add(statusBar,       BorderLayout.SOUTH);
 
@@ -82,6 +81,36 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
 
     private JMenuBar buildMenuBar() {
         JMenuBar bar = new JMenuBar();
+
+        // ── Connections menu ──────────────────────────────────────────────────
+        JMenu connectionsMenu = new JMenu("Connections");
+
+        JMenuItem quickItem = new JMenuItem("Quick Connect…");
+        quickItem.setToolTipText(
+                "Connect to a server without saving a profile first");
+        quickItem.addActionListener(e -> {
+            AdHocConnectionDialog dlg =
+                    new AdHocConnectionDialog(this, profileStore);
+            dlg.setVisible(true);  // blocks until closed
+            ConnectionConfig cfg = dlg.getResult();
+            if (cfg != null) {
+                quickConnectBar.reloadProfiles();  // in case user saved a profile
+                quickConnectBar.setConnecting();
+                service.connect(cfg);
+            }
+        });
+
+        JMenuItem manageItem = new JMenuItem("Manage Connections…");
+        manageItem.setToolTipText("Add, edit and delete saved connection profiles");
+        manageItem.addActionListener(e -> {
+            new ConnectionManagerDialog(this, profileStore).setVisible(true);
+            quickConnectBar.reloadProfiles();
+        });
+
+        connectionsMenu.add(quickItem);
+        connectionsMenu.addSeparator();
+        connectionsMenu.add(manageItem);
+        bar.add(connectionsMenu);
 
         JMenu securityMenu = new JMenu("Security");
 
@@ -123,7 +152,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     @Override
     public void onConnected(String endpointUrl) {
         SwingUtilities.invokeLater(() -> {
-            connectionPanel.setConnected(endpointUrl);
+            quickConnectBar.setConnected(endpointUrl);
             setStatus("Connected to " + endpointUrl + " – browsing root…");
             nodeTreePanel.clear();
             service.browseNode(null);
@@ -133,7 +162,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     @Override
     public void onDisconnected(String reason) {
         SwingUtilities.invokeLater(() -> {
-            connectionPanel.setDisconnected(reason);
+            quickConnectBar.setDisconnected(reason);
             nodeTreePanel.clear();
             attributePanel.clear();
             setStatus("Disconnected: " + reason);
@@ -146,7 +175,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
             String msg = operation + " failed: " + cause.getMessage();
             setStatus("Error – " + msg);
             if ("connect".equals(operation)) {
-                connectionPanel.setError(msg);
+                quickConnectBar.setError(msg);
                 JOptionPane.showMessageDialog(this, msg, "Connection Error",
                         JOptionPane.ERROR_MESSAGE);
             }
