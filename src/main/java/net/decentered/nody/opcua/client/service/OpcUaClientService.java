@@ -12,6 +12,7 @@ import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
 import org.eclipse.milo.opcua.stack.core.security.*;
+import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode;
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.security.*;
 import java.security.cert.CertificateException;
@@ -263,7 +265,7 @@ public class OpcUaClientService {
                     safeAdd(attrs, attrId.name(), () -> {
                         var dv = node.readAttribute(attrId);
                         var v  = dv.getValue().getValue();
-                        return v != null ? valueToString(v) : "<not applicable>";
+                        return v != null ? valueToString(v, c) : "<not applicable>";
                     });
                 }
 
@@ -281,28 +283,108 @@ public class OpcUaClientService {
      */
     private static final int ARRAY_PREVIEW_LIMIT = 64;
 
-    private static String valueToString(Object v) {
+    /**
+     * Converts an OPC UA attribute value to a human-readable string.
+     *
+     * <ul>
+     *   <li><b>ExtensionObject</b> – decoded to its struct POJO and rendered
+     *       field-by-field via reflection so the actual data is visible instead
+     *       of just the encoding node-id.</li>
+     *   <li><b>Arrays</b> – element-by-element, truncated at
+     *       {@value #ARRAY_PREVIEW_LIMIT} items.</li>
+     *   <li><b>Everything else</b> – {@code toString()}.</li>
+     * </ul>
+     */
+    private static String valueToString(Object v, OpcUaClient serCtx) {
         if (v == null) return "<null>";
 
-        Class<?> cls = v.getClass();
+        // ── ExtensionObject: decode and render struct fields ───────────────
+        if (v instanceof ExtensionObject xo) {
+            return decodeExtensionObject(xo, serCtx);
+        }
 
-        // Array (primitive or Object[])
-        if (cls.isArray()) {
+        // ── Array of ExtensionObjects or primitive arrays ─────────────────
+        if (v.getClass().isArray()) {
             int len = Array.getLength(v);
             if (len == 0) return "[]";
-
             int preview = Math.min(len, ARRAY_PREVIEW_LIMIT);
             StringJoiner sj = new StringJoiner(", ", "[", len > preview ? ", …]" : "]");
             for (int i = 0; i < preview; i++) {
                 Object elem = Array.get(v, i);
-                sj.add(elem != null ? elem.toString() : "null");
+                sj.add(elem != null ? valueToString(elem, serCtx) : "null");
             }
-            if (len > 1) sj.add("  (" + len + " elements)");
+            if (len > preview) sj.add("… (" + len + " total)");
             return sj.toString();
         }
 
-        // Everything else: rely on the type's own toString()
+        // ── Everything else ───────────────────────────────────────────────
         return v.toString();
+    }
+    /**
+     * Decodes an {@link ExtensionObject} and renders it as a readable
+     * field-list using reflection.
+     *
+     * <p>Strategy:</p>
+     * <ol>
+     *   <li>Attempt {@code xo.decode(serCtx)} to get the typed POJO
+     *       (works for all Milo-registered structs).</li>
+     *   <li>Reflect over all public no-arg {@code getXxx()} / {@code isXxx()}
+     *       methods to collect field names and values.</li>
+     *   <li>If decoding fails, fall back to showing the body class and
+     *       encoding node-id.</li>
+     * </ol>
+     */
+    private static String decodeExtensionObject(ExtensionObject xo,
+                                                OpcUaClient opcUaClient) {
+        // Null / empty
+        if (xo == null) return "<null>";
+
+        Object decoded = null;
+        try {
+            decoded = xo.decode(opcUaClient.getStaticEncodingContext());
+        } catch (Exception e) {
+            // Fallback: show raw body description
+            Object body = xo.getBody();
+            return "ExtensionObject{body=" +
+                    (body != null ? body.getClass().getSimpleName() + ":" + body : "null") +
+                    "}";
+        }
+
+        if (decoded == null) return "<null>";
+
+        // Special case: if the decoded value is itself a primitive/String, show it directly
+        if (decoded instanceof String || decoded instanceof Number
+                || decoded instanceof Boolean) {
+            return decoded.toString();
+        }
+
+        // Reflect over public getters to build a field map
+        StringJoiner fields = new StringJoiner(", ",
+                decoded.getClass().getSimpleName() + "{" , "}");
+        boolean anyField = false;
+        for (Method m : decoded.getClass().getMethods()) {
+            String name = m.getName();
+            // Accept getXxx() and isXxx() with no parameters, excluding Object methods
+            if (m.getParameterCount() != 0) continue;
+            if (m.getDeclaringClass() == Object.class) continue;
+            String fieldName = null;
+            if (name.startsWith("get") && name.length() > 3) {
+                fieldName = Character.toLowerCase(name.charAt(3)) + name.substring(4);
+            } else if (name.startsWith("is") && name.length() > 2) {
+                fieldName = Character.toLowerCase(name.charAt(2)) + name.substring(3);
+            }
+            if (fieldName == null) continue;
+            try {
+                Object val = m.invoke(decoded);
+                // Recursively format nested ExtensionObjects or arrays
+                String valStr = (val != null)
+                        ? valueToString(val, opcUaClient)
+                        : "null";
+                fields.add(fieldName + "=" + valStr);
+                anyField = true;
+            } catch (Exception ignored) { }
+        }
+        return anyField ? fields.toString() : decoded.toString();
     }
 
     /**
