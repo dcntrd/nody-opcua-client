@@ -8,18 +8,41 @@ import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.*;
 import java.awt.*;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.IntFunction;
 
 /**
  * Left panel – lazily expanding JTree of the OPC UA address space.
+ *
+ * <h3>Lazy-load sequence (fix for double-click issue)</h3>
+ * The original code called {@code treeModel.nodeStructureChanged()} inside
+ * {@code treeWillExpand()}, which caused Swing to cancel the in-progress
+ * expansion.  The result was that children arrived in the model but the node
+ * stayed visually collapsed, requiring a second click on the arrow.
+ *
+ * <p>The corrected approach:</p>
+ * <ol>
+ *   <li>{@code treeWillExpand} – mark the node as loading and fire the browse
+ *       request, but do <em>not</em> touch the model at all.  The dummy
+ *       "Loading…" child stays in place so the expand arrow is visible and
+ *       Swing can complete the expansion uninterrupted.</li>
+ *   <li>{@code appendChildren} (called from EDT when browse results arrive) –
+ *       replace the dummy child with real nodes, then call
+ *       {@code tree.expandPath()} so the node opens automatically without
+ *       requiring a second user gesture.</li>
+ * </ol>
  */
 public class NodeTreePanel extends JPanel {
 
-    // Tree node
+    // ── Tree node ─────────────────────────────────────────────────────────────
 
     public static class OpcUaTreeNode extends DefaultMutableTreeNode {
 
@@ -33,9 +56,12 @@ public class NodeTreePanel extends JPanel {
             add(new DefaultMutableTreeNode("Loading…"));
         }
 
+        /** Constructor for the root node – no placeholder child needed. */
         public OpcUaTreeNode(String label) {
             super(label);
             this.nodeId = null;
+            // No "Loading…" child: the root is populated via setRootChildren(),
+            // not by lazy expansion, so no placeholder is needed or wanted.
         }
 
         public NodeId  getNodeId()                       { return nodeId; }
@@ -53,20 +79,25 @@ public class NodeTreePanel extends JPanel {
         }
     }
 
-    // Fields
+    // ── Fields ────────────────────────────────────────────────────────────────
 
     private final JTree             tree;
     private final DefaultTreeModel  treeModel;
     private final OpcUaTreeNode     root;
 
-    private final Consumer<NodeId> onBrowseRequested;
-    private final Consumer<NodeId> onNodeSelected;
+    private final Consumer<NodeId>  onBrowseRequested;
+    private final Consumer<NodeId>  onNodeSelected;
+    /** Resolves a namespace index to its URI; called on the EDT (non-blocking). */
+    private final IntFunction<String> namespaceUriResolver;
 
-    // Construction
+    // ── Construction ──────────────────────────────────────────────────────────
 
-    public NodeTreePanel(Consumer<NodeId> onBrowseRequested, Consumer<NodeId> onNodeSelected) {
-        this.onBrowseRequested = onBrowseRequested;
-        this.onNodeSelected    = onNodeSelected;
+    public NodeTreePanel(Consumer<NodeId> onBrowseRequested,
+                         Consumer<NodeId> onNodeSelected,
+                         IntFunction<String> namespaceUriResolver) {
+        this.onBrowseRequested    = onBrowseRequested;
+        this.onNodeSelected       = onNodeSelected;
+        this.namespaceUriResolver = namespaceUriResolver;
 
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder("Address Space"));
@@ -79,7 +110,7 @@ public class NodeTreePanel extends JPanel {
         tree.setShowsRootHandles(true);
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
-        // Lazy-load listener
+        // ── Lazy-load listener ────────────────────────────────────────────────
         tree.addTreeWillExpandListener(new TreeWillExpandListener() {
             @Override
             public void treeWillExpand(TreeExpansionEvent event) {
@@ -103,7 +134,7 @@ public class NodeTreePanel extends JPanel {
             public void treeWillCollapse(TreeExpansionEvent event) { }
         });
 
-        // Selection listener
+        // ── Selection listener ────────────────────────────────────────────────
         tree.addTreeSelectionListener(e -> {
             TreePath path = tree.getSelectionPath();
             if (path == null) return;
@@ -113,7 +144,66 @@ public class NodeTreePanel extends JPanel {
             }
         });
 
+        // ── Context menu ──────────────────────────────────────────────────
+        JPopupMenu contextMenu = buildContextMenu();
+        tree.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e)  { maybeShowPopup(e); }
+            @Override public void mouseReleased(MouseEvent e) { maybeShowPopup(e); }
+
+            private void maybeShowPopup(MouseEvent e) {
+                if (!e.isPopupTrigger()) return;
+                // Select the node under the pointer before showing the menu
+                TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+                if (path != null) tree.setSelectionPath(path);
+                contextMenu.show(tree, e.getX(), e.getY());
+            }
+        });
+
         add(new JScrollPane(tree), BorderLayout.CENTER);
+    }
+
+    // ── Context menu ──────────────────────────────────────────────────────
+
+    private JPopupMenu buildContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
+
+        JMenuItem copyNodeId = new JMenuItem("Copy Node Identifier");
+        copyNodeId.setToolTipText(
+                "Copy the full NodeId string to the clipboard  –  e.g. ns=2;s=MyDevice");
+        copyNodeId.addActionListener(e -> {
+            NodeId nodeId = selectedNodeId();
+            if (nodeId != null) copyToClipboard(nodeId.toParseableString());
+        });
+
+        JMenuItem copyNamespace = new JMenuItem("Copy Namespace URI");
+        copyNamespace.setToolTipText(
+                "Resolve and copy the namespace URI for the selected node");
+        copyNamespace.addActionListener(e -> {
+            NodeId nodeId = selectedNodeId();
+            if (nodeId != null) {
+                String uri = namespaceUriResolver.apply(nodeId.getNamespaceIndex().intValue());
+                copyToClipboard(uri);
+            }
+        });
+
+        menu.add(copyNodeId);
+        menu.addSeparator();
+        menu.add(copyNamespace);
+        return menu;
+    }
+
+    /** Returns the {@link NodeId} of the currently selected tree node, or {@code null}. */
+    private NodeId selectedNodeId() {
+        TreePath path = tree.getSelectionPath();
+        if (path == null) return null;
+        Object last = path.getLastPathComponent();
+        return (last instanceof OpcUaTreeNode n) ? n.getNodeId() : null;
+    }
+
+    private static void copyToClipboard(String text) {
+        Toolkit.getDefaultToolkit()
+                .getSystemClipboard()
+                .setContents(new StringSelection(text), null);
     }
 
     // ── Public API (always called from EDT by MainFrame) ──────────────────────
@@ -125,11 +215,24 @@ public class NodeTreePanel extends JPanel {
     public void setRootChildren(List<UaNode> children) {
         root.removeAllChildren();
         root.setChildrenLoaded(true);
-        for (UaNode child : children) root.add(new OpcUaTreeNode(child));
+        for (UaNode child : deduplicate(children)) root.add(new OpcUaTreeNode(child));
         treeModel.nodeStructureChanged(root);
         tree.expandPath(new TreePath(root.getPath()));
     }
 
+    /**
+     * Replaces the "Loading…" placeholder with real children for every tree
+     * node instance whose NodeId matches {@code parentNodeIdStr}, then expands
+     * each one.
+     *
+     * <h3>Why "all matching nodes"?</h3>
+     * OPC UA models a graph, not a tree. The same node can be reachable via
+     * multiple hierarchical reference paths (e.g. {@code Objects/MyDevice} and
+     * {@code Objects/DeviceSet/MyDevice} both point to the same NodeId).  Each
+     * path produces a separate {@link OpcUaTreeNode} instance in the Swing tree,
+     * so updating only the first match (as the old {@code findNode} did) left
+     * every other instance stuck on "Loading…".
+     */
     public void appendChildren(String parentNodeIdStr, List<UaNode> children) {
         List<OpcUaTreeNode> matches = findAllNodes(root, parentNodeIdStr);
         if (matches.isEmpty()) return;
@@ -146,12 +249,21 @@ public class NodeTreePanel extends JPanel {
         }
     }
 
+    /** Resets the tree to a truly empty state (no placeholder). */
     public void clear() {
         root.removeAllChildren();
         root.setChildrenLoaded(false);
         treeModel.nodeStructureChanged(root);
     }
 
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Returns every {@link OpcUaTreeNode} in the subtree rooted at
+     * {@code current} whose NodeId string equals {@code nodeIdStr}.
+     * Multiple matches occur when the same OPC UA node is reachable via
+     * more than one hierarchical reference path.
+     */
     private List<OpcUaTreeNode> findAllNodes(OpcUaTreeNode current, String nodeIdStr) {
         List<OpcUaTreeNode> result = new ArrayList<>();
         collectNodes(current, nodeIdStr, result);

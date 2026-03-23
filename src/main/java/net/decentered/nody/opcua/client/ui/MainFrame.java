@@ -54,8 +54,8 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
                 nodeId -> {
                     attributePanel.showLoading(nodeId.toParseableString());
                     service.readAttributes(nodeId);
-                }
-        );
+                },
+                nsIndex -> service.resolveNamespaceUri(nsIndex));
 
         statusBar = new JLabel("Ready");
         statusBar.setBorder(BorderFactory.createCompoundBorder(

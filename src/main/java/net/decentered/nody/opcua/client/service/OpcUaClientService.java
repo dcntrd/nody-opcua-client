@@ -305,6 +305,25 @@ public class OpcUaClientService {
         return v.toString();
     }
 
+    /**
+     * Looks up the namespace URI for the given index using the client's
+     * local {@code NamespaceTable} cache.  Returns {@code "ns=<index>"}
+     * as a fallback if the client is not connected or the index is unknown.
+     *
+     * <p>This is a fast, non-blocking call – the namespace table is a local
+     * cache populated during session creation.</p>
+     */
+    public String resolveNamespaceUri(int namespaceIndex) {
+        OpcUaClient c = client;
+        if (c == null) return "ns=" + namespaceIndex;
+        try {
+            String uri = c.getNamespaceTable().get(namespaceIndex);
+            return (uri != null) ? uri : "ns=" + namespaceIndex;
+        } catch (Exception e) {
+            return "ns=" + namespaceIndex;
+        }
+    }
+
     /** Shuts down the background executor – call on application exit. */
     public void shutdown() {
         executor.shutdownNow();
