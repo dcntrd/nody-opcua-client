@@ -169,7 +169,7 @@ public class NodeTreePanel extends JPanel {
 
         JMenuItem copyNodeId = new JMenuItem("Copy Node Identifier");
         copyNodeId.setToolTipText(
-                "Copy the full NodeId string to the clipboard  –  e.g. ns=2;s=MyDevice");
+                "Copy the full NodeId string to the clipboard  –  e.g. ns=2;s=MyNode");
         copyNodeId.addActionListener(e -> {
             NodeId nodeId = selectedNodeId();
             if (nodeId != null) copyToClipboard(nodeId.toParseableString());
@@ -177,7 +177,7 @@ public class NodeTreePanel extends JPanel {
 
         JMenuItem copyNamespace = new JMenuItem("Copy Namespace URI");
         copyNamespace.setToolTipText(
-                "Resolve and copy the namespace URI for the selected node");
+                "Copy the namespace URI for the selected node");
         copyNamespace.addActionListener(e -> {
             NodeId nodeId = selectedNodeId();
             if (nodeId != null) {
