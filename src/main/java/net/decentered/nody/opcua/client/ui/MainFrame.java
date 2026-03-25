@@ -55,7 +55,8 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
                     attributePanel.showLoading(nodeId.toParseableString());
                     service.readAttributes(nodeId);
                 },
-                nsIndex -> service.resolveNamespaceUri(nsIndex));
+                nsIndex -> service.resolveNamespaceUri(nsIndex),
+                (nodeId, variant) -> service.writeValue(nodeId, variant));
 
         statusBar = new JLabel("Ready");
         statusBar.setBorder(BorderFactory.createCompoundBorder(
@@ -201,6 +202,17 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         SwingUtilities.invokeLater(() -> {
             attributePanel.showAttributes(nodeId, attributes);
             setStatus("Attributes loaded for " + nodeId);
+        });
+    }
+
+    @Override
+    public void onWriteComplete(String nodeId) {
+        SwingUtilities.invokeLater(() -> {
+            setStatus("Write successful: " + nodeId);
+            // Re-read the attributes so the panel reflects the new value
+            service.readAttributes(
+                    org.eclipse.milo.opcua.stack.core.types.builtin.NodeId
+                            .parseSafe(nodeId).orElse(null));
         });
     }
 

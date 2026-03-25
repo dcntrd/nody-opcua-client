@@ -16,8 +16,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
+import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass;
 
 /**
  * Left panel – lazily expanding JTree of the OPC UA address space.
@@ -46,27 +50,30 @@ public class NodeTreePanel extends JPanel {
 
     public static class OpcUaTreeNode extends DefaultMutableTreeNode {
 
-        private final NodeId nodeId;
+        private final NodeId    nodeId;
+        private final NodeClass nodeClass;
         private boolean childrenLoaded = false;
 
         /** Constructor for real UaNodes – adds a placeholder child so the expand arrow appears. */
         public OpcUaTreeNode(UaNode uaNode) {
             super(uaNode);
-            this.nodeId = uaNode.getNodeId();
+            this.nodeId    = uaNode.getNodeId();
+            this.nodeClass = uaNode.getNodeClass();
             add(new DefaultMutableTreeNode("Loading…"));
         }
 
         /** Constructor for the root node – no placeholder child needed. */
         public OpcUaTreeNode(String label) {
             super(label);
-            this.nodeId = null;
-            // No "Loading…" child: the root is populated via setRootChildren(),
-            // not by lazy expansion, so no placeholder is needed or wanted.
+            this.nodeId    = null;
+            this.nodeClass = null;
         }
 
-        public NodeId  getNodeId()                       { return nodeId; }
-        public boolean isChildrenLoaded()                { return childrenLoaded; }
-        public void    setChildrenLoaded(boolean loaded) { this.childrenLoaded = loaded; }
+        public NodeId    getNodeId()                       { return nodeId; }
+        public NodeClass getNodeClass()                    { return nodeClass; }
+        public boolean   isVariable()                      { return nodeClass == NodeClass.Variable; }
+        public boolean   isChildrenLoaded()                { return childrenLoaded; }
+        public void      setChildrenLoaded(boolean loaded) { this.childrenLoaded = loaded; }
 
         @Override
         public String toString() {
@@ -89,15 +96,19 @@ public class NodeTreePanel extends JPanel {
     private final Consumer<NodeId>  onNodeSelected;
     /** Resolves a namespace index to its URI; called on the EDT (non-blocking). */
     private final IntFunction<String> namespaceUriResolver;
+    /** Called when the user chooses Write Value from the context menu. */
+    private final BiConsumer<NodeId, Variant> onWriteValue;
 
     // ── Construction ──────────────────────────────────────────────────────────
 
     public NodeTreePanel(Consumer<NodeId> onBrowseRequested,
                          Consumer<NodeId> onNodeSelected,
-                         IntFunction<String> namespaceUriResolver) {
+                         IntFunction<String> namespaceUriResolver,
+                         BiConsumer<NodeId, Variant> onWriteValue) {
         this.onBrowseRequested    = onBrowseRequested;
         this.onNodeSelected       = onNodeSelected;
         this.namespaceUriResolver = namespaceUriResolver;
+        this.onWriteValue         = onWriteValue;
 
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder("Address Space"));
@@ -186,18 +197,72 @@ public class NodeTreePanel extends JPanel {
             }
         });
 
+        JMenuItem writeValue = new JMenuItem("Write Value…");
+        writeValue.setToolTipText(
+                "Write a new value to this Variable node");
+        writeValue.addActionListener(e -> handleWriteValue());
+
         menu.add(copyNodeId);
         menu.addSeparator();
         menu.add(copyNamespace);
+        menu.addSeparator();
+        menu.add(writeValue);
+
+        // Enable Write Value only for Variable nodes
+        menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override public void popupMenuWillBecomeVisible(
+                    javax.swing.event.PopupMenuEvent e) {
+                OpcUaTreeNode sel = selectedTreeNode();
+                writeValue.setEnabled(sel != null && sel.isVariable());
+            }
+            @Override public void popupMenuWillBecomeInvisible(
+                    javax.swing.event.PopupMenuEvent e) { }
+            @Override public void popupMenuCanceled(
+                    javax.swing.event.PopupMenuEvent e) { }
+        });
+
         return menu;
+    }
+
+    private void handleWriteValue() {
+        OpcUaTreeNode treeNode = selectedTreeNode();
+        if (treeNode == null || !treeNode.isVariable()) return;
+
+        NodeId nodeId = treeNode.getNodeId();
+        // Get current value and dataType from the UaNode user object
+        String currentValue = "";
+        String dataType     = "";
+        if (treeNode.getUserObject() instanceof UaNode uaNode) {
+            try { currentValue = String.valueOf(
+                    uaNode.readAttribute(
+                                    org.eclipse.milo.opcua.stack.core.AttributeId.Value)
+                            .getValue().getValue()); }
+            catch (Exception ignored) { }
+            try { dataType = String.valueOf(
+                    uaNode.readAttribute(
+                                    org.eclipse.milo.opcua.stack.core.AttributeId.DataType)
+                            .getValue().getValue()); }
+            catch (Exception ignored) { }
+        }
+
+        Frame frame = (Frame) SwingUtilities.getWindowAncestor(this);
+        new WriteValueDialog(frame, nodeId, currentValue, dataType,
+                (nid, variant) -> onWriteValue.accept(nid, variant))
+                .setVisible(true);
+    }
+
+    /** Returns the selected {@link OpcUaTreeNode}, or {@code null}. */
+    private OpcUaTreeNode selectedTreeNode() {
+        TreePath path = tree.getSelectionPath();
+        if (path == null) return null;
+        Object last = path.getLastPathComponent();
+        return (last instanceof OpcUaTreeNode n) ? n : null;
     }
 
     /** Returns the {@link NodeId} of the currently selected tree node, or {@code null}. */
     private NodeId selectedNodeId() {
-        TreePath path = tree.getSelectionPath();
-        if (path == null) return null;
-        Object last = path.getLastPathComponent();
-        return (last instanceof OpcUaTreeNode n) ? n.getNodeId() : null;
+        OpcUaTreeNode n = selectedTreeNode();
+        return n != null ? n.getNodeId() : null;
     }
 
     private static void copyToClipboard(String text) {

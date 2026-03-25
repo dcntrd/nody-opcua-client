@@ -12,9 +12,7 @@ import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.NodeIds;
 import org.eclipse.milo.opcua.stack.core.security.*;
-import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
-import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
-import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.*;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -385,6 +383,48 @@ public class OpcUaClientService {
             } catch (Exception ignored) { }
         }
         return anyField ? fields.toString() : decoded.toString();
+    }
+
+    /**
+     * Writes a new value to the {@code Value} attribute of the OPC UA variable
+     * node identified by {@code nodeId} asynchronously.
+     *
+     * <p>The caller supplies the value already wrapped in a {@link Variant}.
+     * On success {@link OpcUaClientListener#onWriteComplete} is called;
+     * on failure {@link OpcUaClientListener#onError} is called with operation
+     * {@code "write"}.</p>
+     *
+     * @param nodeId   the variable node to write
+     * @param variant  the new value (type must match the node's DataType)
+     */
+    public void writeValue(NodeId nodeId, Variant variant) {
+        executor.submit(() -> {
+            OpcUaClient c = client;
+            if (c == null) {
+                listener.onError("write", new IllegalStateException("Not connected"));
+                return;
+            }
+            try {
+                DataValue value = new DataValue(variant);
+
+                List<NodeId> nodeIds = new ArrayList<>();
+                nodeIds.add(nodeId);
+
+                List<DataValue> values = new ArrayList<>();
+                values.add(value);
+
+                List<StatusCode> statusCodes = c.writeValues(nodeIds, values);
+                if (statusCodes.getFirst().isGood()) {
+                    listener.onWriteComplete(nodeId.toParseableString());
+                } else {
+                    listener.onError("write",
+                            new RuntimeException("Write failed: " + statusCodes.getFirst()));
+                }
+            } catch (Exception e) {
+                LOG.error("Write failed for {}", nodeId, e);
+                listener.onError("write", e);
+            }
+        });
     }
 
     /**
