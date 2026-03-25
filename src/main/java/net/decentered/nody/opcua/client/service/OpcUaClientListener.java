@@ -30,6 +30,13 @@ public interface OpcUaClientListener {
     void onNodesBrowsed(String parentNodeId, List<UaNode> children);
 
     /**
+     * Called when a value has been successfully written to a node.
+     *
+     * @param nodeId the node-id string of the written node
+     */
+    void onWriteComplete(String nodeId);
+
+    /**
      * Called when the attributes of a node have been read.
      *
      * @param nodeId     the node-id string of the queried node
