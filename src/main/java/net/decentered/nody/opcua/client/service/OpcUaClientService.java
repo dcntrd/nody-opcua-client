@@ -414,11 +414,11 @@ public class OpcUaClientService {
                 values.add(value);
 
                 List<StatusCode> statusCodes = c.writeValues(nodeIds, values);
-                if (statusCodes.getFirst().isGood()) {
+                if (statusCodes.get(0).isGood()) {
                     listener.onWriteComplete(nodeId.toParseableString());
                 } else {
                     listener.onError("write",
-                            new RuntimeException("Write failed: " + statusCodes.getFirst()));
+                            new RuntimeException("Write failed: " + statusCodes.get(0)));
                 }
             } catch (Exception e) {
                 LOG.error("Write failed for {}", nodeId, e);
@@ -445,6 +445,13 @@ public class OpcUaClientService {
             return "ns=" + namespaceIndex;
         }
     }
+
+    /**
+     * Returns the active {@link OpcUaClient}, or {@code null} if not connected.
+     * Used by {@link net.decentered.nody.opcua.client.subscription.SubscriptionService}
+     * to set up subscriptions after a session is established.
+     */
+    public OpcUaClient getClient() { return client; }
 
     /** Shuts down the background executor – call on application exit. */
     public void shutdown() {

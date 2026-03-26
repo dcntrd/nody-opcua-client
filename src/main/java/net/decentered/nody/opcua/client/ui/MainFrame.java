@@ -6,6 +6,7 @@ import net.decentered.nody.opcua.client.security.CertificateManager;
 import net.decentered.nody.opcua.client.service.OpcUaClientListener;
 import net.decentered.nody.opcua.client.service.OpcUaClientService;
 import net.decentered.nody.opcua.client.settings.ConnectionProfileStore;
+import net.decentered.nody.opcua.client.subscription.SubscriptionService;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
 
 import javax.swing.*;
@@ -21,8 +22,10 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
 
     private final QuickConnectBar quickConnectBar;
     private final NodeTreePanel nodeTreePanel;
-    private final AttributePanel attributePanel;
+    private final RightPanel rightPanel;
     private final JLabel statusBar;
+
+    private final SubscriptionService subscriptionService;
 
     public MainFrame() {
         super(APP_TITLE);
@@ -47,12 +50,17 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
                 cfg -> service.connect(cfg),
                 ()  -> service.disconnect());
 
-        attributePanel = new AttributePanel();
+        subscriptionService = new SubscriptionService();
+
+        rightPanel = new RightPanel();
+        rightPanel.setSubscriptionService(subscriptionService);
+
+        subscriptionService.setCallbacks(rightPanel::onDataChange, rightPanel::onEvent, this::onError);
 
         nodeTreePanel = new NodeTreePanel(
                 parentNodeId -> service.browseNode(parentNodeId),
                 nodeId -> {
-                    attributePanel.showLoading(nodeId.toParseableString());
+                    rightPanel.showLoading(nodeId.toParseableString());
                     service.readAttributes(nodeId);
                 },
                 nsIndex -> service.resolveNamespaceUri(nsIndex),
@@ -63,7 +71,8 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
                 BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY),
                 BorderFactory.createEmptyBorder(2, 6, 2, 6)));
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, nodeTreePanel, attributePanel);
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                nodeTreePanel, rightPanel);
         splitPane.setDividerLocation(400);
         splitPane.setResizeWeight(0.35);
 
@@ -155,6 +164,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
         SwingUtilities.invokeLater(() -> {
             quickConnectBar.setConnected(endpointUrl);
             setStatus("Connected to " + endpointUrl + " – browsing root…");
+            subscriptionService.onConnected(service.getClient());
             nodeTreePanel.clear();
             service.browseNode(null);
         });
@@ -164,8 +174,9 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     public void onDisconnected(String reason) {
         SwingUtilities.invokeLater(() -> {
             quickConnectBar.setDisconnected(reason);
+            subscriptionService.onDisconnected();
             nodeTreePanel.clear();
-            attributePanel.clear();
+            rightPanel.clear();
             setStatus("Disconnected: " + reason);
         });
     }
@@ -200,7 +211,7 @@ public class MainFrame extends JFrame implements OpcUaClientListener {
     @Override
     public void onAttributesRead(String nodeId, List<NodeAttribute> attributes) {
         SwingUtilities.invokeLater(() -> {
-            attributePanel.showAttributes(nodeId, attributes);
+            rightPanel.showAttributes(nodeId, attributes);
             setStatus("Attributes loaded for " + nodeId);
         });
     }
