@@ -8,6 +8,8 @@ import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.*;
 import java.awt.*;
+import java.awt.dnd.*;
+import java.awt.datatransfer.Transferable;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
@@ -19,7 +21,6 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
-import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass;
 
@@ -167,6 +168,27 @@ public class NodeTreePanel extends JPanel {
                 TreePath path = tree.getPathForLocation(e.getX(), e.getY());
                 if (path != null) tree.setSelectionPath(path);
                 contextMenu.show(tree, e.getX(), e.getY());
+            }
+        });
+
+        // ── Drag source: export NodeId to subscription / event panels ────────
+        tree.setDragEnabled(true);
+        tree.setTransferHandler(new javax.swing.TransferHandler() {
+            @Override
+            public int getSourceActions(javax.swing.JComponent c) {
+                return COPY;
+            }
+            @Override
+            protected Transferable createTransferable(javax.swing.JComponent c) {
+                NodeId nid = selectedNodeId();
+                if (nid == null) return null;
+                TreePath tp = tree.getSelectionPath();
+                String name = tp == null ? nid.toParseableString()
+                        : tp.getLastPathComponent().toString();
+                // Strip the [ns=…] suffix from toString() for a clean display name
+                int bracket = name.indexOf("  [");
+                if (bracket > 0) name = name.substring(0, bracket).trim();
+                return new NodeIdTransferable(nid, name);
             }
         });
 
