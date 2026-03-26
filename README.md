@@ -2,7 +2,7 @@
 
 This project is under construction.  
 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. *
+__THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.__
 
 Nody UA is an OpcUa Client based on Java/Swing using the Milo OpcUa SDK.  
 
@@ -17,8 +17,7 @@ Nody UA is an OpcUa Client based on Java/Swing using the Milo OpcUa SDK.
 
 ## Known issues
 * Write values to OpcUa Variable Nodes does currently work for some data types.
-* When subscribing to Nodes (MointoredDataItems) there are problems when you disconnect from the server and connect again, the newly created subscription fails. To solve it the client has to be restarted.
-
+* Subscription cleanup has to be improved.
 
 
 
