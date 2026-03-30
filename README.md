@@ -1,4 +1,4 @@
-# Nody UA
+![Logo](images/logo-and-text.png)
 
 This project is under construction.  
 
