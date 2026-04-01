@@ -1,6 +1,7 @@
 ![Nody UA](images/logo-and-textv2.png)
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License.  
+
 This distribution includes Eclipse Milo (OPC UA SDK),
 which is licensed under the Eclipse Public License 2.0
 
