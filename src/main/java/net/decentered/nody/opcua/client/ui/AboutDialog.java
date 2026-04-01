@@ -167,7 +167,7 @@ public class AboutDialog extends JDialog {
         // Tech details
         panel.add(infoRow("Built with",  "Eclipse Milo " + MILO_VER + "  ·  Java " + JAVA_VER));
         panel.add(Box.createVerticalStrut(6));
-        panel.add(infoRow("License",     "xxx"));
+        panel.add(infoRow("License",     "MIT License"));
 
         panel.add(Box.createVerticalStrut(12));
 
