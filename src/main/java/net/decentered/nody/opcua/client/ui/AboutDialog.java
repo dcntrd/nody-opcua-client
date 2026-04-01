@@ -111,8 +111,8 @@ public class AboutDialog extends JDialog {
                 return null;
             }
             ImageIcon raw = new ImageIcon(url);
-            // Scale to 128×128 for crisp display at standard DPI
-            Image scaled = raw.getImage().getScaledInstance(128, 128, Image.SCALE_SMOOTH);
+            // Scale to 109×128 for crisp display at standard DPI
+            Image scaled = raw.getImage().getScaledInstance(109, 128, Image.SCALE_SMOOTH);
             return new ImageIcon(scaled);
         } catch (Exception e) {
             return null;
